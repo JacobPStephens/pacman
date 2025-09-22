@@ -3,11 +3,14 @@
 
 #include <vector>
 #include <map>
+#include <tuple>
+#include <array>
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include "GameLevel.h"
 #include "PlayerObject.h"
+#include "Direction.h"
 
 
 enum GameState {
@@ -16,6 +19,7 @@ enum GameState {
     GAME_WIN
 };
 
+typedef std::tuple<bool, Direction, glm::vec2> Collision;
 class Game {
 
     public:
@@ -35,6 +39,13 @@ class Game {
         // core game loop
         void ProcessInput(float dt);
         void Update(float dt);
+
+        std::tuple<glm::vec2, glm::vec2> AssembleWallInfo(float x1, float y1, float x2, float y2);
+        void HandleCollisions();
+
+        bool CheckPlayerWallCollision(Direction direction);
+
+        bool CheckCollision(glm::vec2 onePos, glm::vec2 oneSize, glm::vec2 twoPos, glm::vec2 twoSize);
         void Render();
 
 };

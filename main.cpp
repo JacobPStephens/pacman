@@ -11,8 +11,9 @@
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
-const unsigned int SCREEN_WIDTH = 1200;
-const unsigned int SCREEN_HEIGHT = 900;
+const int RESOLUTION_SCALE = 4;
+const unsigned int SCREEN_WIDTH = 224 * RESOLUTION_SCALE;
+const unsigned int SCREEN_HEIGHT = 248 * RESOLUTION_SCALE;
 
 Game* Pacman = new Game(SCREEN_WIDTH, SCREEN_HEIGHT);
 
