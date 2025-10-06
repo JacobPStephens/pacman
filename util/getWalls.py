@@ -2,7 +2,7 @@
 f = open('pacman.txt', 'r')
 grid = []
 for line in f.readlines():
-    outputLine = (line.strip().split())# + " " + line[::-1].strip()).split()
+    outputLine = (line.strip() + " " + line[::-1].strip()).split()
     grid.append(outputLine)
 f.close()
 boxes = []

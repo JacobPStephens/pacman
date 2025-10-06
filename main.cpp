@@ -11,7 +11,7 @@
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 
-const int RESOLUTION_SCALE = 4;
+const int RESOLUTION_SCALE = 3;
 const unsigned int SCREEN_WIDTH = 224 * RESOLUTION_SCALE;
 const unsigned int SCREEN_HEIGHT = 248 * RESOLUTION_SCALE;
 

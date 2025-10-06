@@ -3,11 +3,15 @@
 #include "SpriteRenderer.h"
 #include "GameObject.h"
 #include "PlayerObject.h"
+#include "Ghost.h"
+#include "Eyes.h"
+
 #include "Wall.h"
 
 #include <iostream>
 #include <fstream>
 #include <queue>
+#include <cmath>
 
 #include <filesystem>
 
@@ -15,19 +19,31 @@ SpriteRenderer* Renderer;
 std::queue<float> fpsQueue;
 float queueSum;
 
-const float RESOLUTION_SCALE = 4.0f;
+const float RESOLUTION_SCALE = 3.0f;
 const float TILE_SIZE = 8.0f * RESOLUTION_SCALE;
-const glm::vec2 PLAYER_SIZE((13.0f * TILE_SIZE) / 8.0f, (13.0f * TILE_SIZE) / 8.0f);
-const float PLAYER_VELOCITY((35.0f * TILE_SIZE) / 8.0f);
+const glm::vec2 PLAYER_SIZE(13.0f/8.0f * TILE_SIZE);
+const glm::vec2 GHOST_SIZE(14.0f/8.0f * TILE_SIZE);
+const float PLAYER_VELOCITY(53.0f/8.0f * TILE_SIZE);
+int remainingDots = 240; // CHANGE WHEN ADDING POWER DOTS
+
+// 256.074 RED GHOST SPAWN Y
 PlayerObject* Player;
+Ghost* RedGhost;
+Eyes* RedGhostEyes;
+GameObject* GhostMapTarget;
+GameObject* GhostAdjTarget;
+
+
 //GameObject* Wall;
 //GameObject* Wall2;
 GameObject* Background;
 GameObject* CurrentSensor;
 GameObject* QueuedSensor;
-std::vector<Wall*> walls;
+std::vector<GameObject*> walls;
+std::vector<GameObject*> dots;
 
-
+GameObject* MapTiles;
+std::vector<std::vector<int>>* map;
 
 glm::vec2 dirToVec(Direction direction) {
     switch (direction) {
@@ -44,6 +60,8 @@ glm::vec2 dirToVec(Direction direction) {
     }
 }
 
+
+
 Game::Game(unsigned int width, unsigned int height) 
     : State(GAME_ACTIVE), Keys(), Width(width), Height(height) 
 {
@@ -53,6 +71,11 @@ Game::Game(unsigned int width, unsigned int height)
 Game::~Game() {
     delete Renderer;
     delete Player;
+    delete map;
+    delete RedGhost;
+    delete RedGhostEyes;
+    delete GhostMapTarget;
+    delete GhostAdjTarget;
     //delete Wall;
     //delete Wall2;
     delete CurrentSensor;
@@ -63,6 +86,10 @@ Game::~Game() {
     for (int i = 0; i < walls.size(); i++) {
         delete walls[i];
     }
+    for (int i = 0; i < dots.size(); i++) {
+        delete dots[i];
+    }    
+    delete MapTiles;
 }
 
 
@@ -70,77 +97,201 @@ Game::~Game() {
 // const float BALL_RADIUS = 12.5f;
 // BallObject *Ball;
 
-void Game::Init() {
-
-
-    ResourceManager::LoadTexture("textures/pacmanNew1.png", true, "pacman");
-    ResourceManager::LoadTexture("textures/pacmanNew2.png", true, "pacman2");
-    ResourceManager::LoadTexture("textures/map.png", false, "walls");
-    ResourceManager::LoadTexture("textures/grayWall.png", true, "grayWall");
-    ResourceManager::LoadTexture("textures/px.png", true, "px");
-    ResourceManager::LoadTexture("textures/map224x248.png", true, "map224x248");
+std::vector<std::vector<int>>* Game::BuildMap() {
+    std::ifstream mapInput;
+    std::string line;
     
-    std::vector<Texture2D> wallSprites = { ResourceManager::GetTexture("map224x248")};
+    mapInput.open("/home/jacob/source/pacman/util/map.txt");
+    if (!mapInput.is_open())
+        std::cout <<"MAP FILE DID NOT OPEN" << std::endl;
 
-    glm::vec2 mapSize = glm::vec2(224.0f * RESOLUTION_SCALE, 248.0f * RESOLUTION_SCALE);
-    glm::vec2 mapPos = glm::vec2(this->Width/2.0f - mapSize.x/2.0f, 0.0f);
+    float halfTile = TILE_SIZE / 2.0f;
+    float halfDot = (TILE_SIZE / 4.0f) / 2.0f;
 
-    Background = new GameObject(mapPos, mapSize, wallSprites, 1.0f, glm::vec3(1.0f), glm::vec3(0.0f), std::string("wall"));
+    map = new std::vector<std::vector<int>>();
+    
+    while (std::getline (mapInput, line)) {
+        std::vector<int> rowInt;
+        std::vector<std::string> rowStr = Split(line);
 
+        //PrintVector(rowStr);
+        for (int i = 0; i < rowStr.size(); i++) {
+            //std::cout << rowStr[i] << std::endl;
+            //std::cout << rowStr[i].size() << std::endl;
+
+            if (rowStr[i] == "") {
+                std::cout <<" Empty string" << std::endl;
+            }
+            // if (rowStr[i][0] == '\r') {
+            //     std::cout << "new line detected";
+            // }
+
+            rowInt.push_back(std::stoi(rowStr[i]));
+        }  
+
+        map->push_back(rowInt);
+        
+
+
+
+        //PrintVector(coordinates);
+        //glm::vec2 tilePos(std::stoi(coordinates[1]) * TILE_SIZE, std::stoi(coordinates[0]) * TILE_SIZE);
+        //std::cout << "Tile Position " << tilePos.x << " " << tilePos.y << std::endl;
+        //glm::vec2 dotPos(tilePos.x + halfTile - halfDot, tilePos.y + halfTile - halfDot);
+        //std::cout << "Dot Position " << dotPos.x << " " << dotPos.y << std::endl;
+
+    }
+    mapInput.close();
+    return map;
+}
+void Game::BuildDots() {
+
+    std::ifstream dotInput;
+    std::string line;
+    
+    dotInput.open("/home/jacob/source/pacman/util/dots.txt");
+    if (!dotInput.is_open())
+        std::cout <<"DOT FILE DID NOT OPEN" << std::endl;
+
+
+    // for (int i = 0; i < ans.size(); i++) {
+    //     std::cout<<ans[i]<<std::endl;
+    // }
+    float halfTile = TILE_SIZE / 2.0f;
+    float halfDot = (TILE_SIZE / 4.0f) / 2.0f;
+    std::vector<Texture2D> pxSprite = { ResourceManager::GetTexture("px")};
+    while (std::getline (dotInput, line)) {
+        std::vector<std::string> coordinates = Split(line);
+        //PrintVector(coordinates);
+        glm::vec2 tilePos(std::stoi(coordinates[1]) * TILE_SIZE, std::stoi(coordinates[0]) * TILE_SIZE);
+        //std::cout << "Tile Position " << tilePos.x << " " << tilePos.y << std::endl;
+        glm::vec2 dotPos(tilePos.x + halfTile - halfDot, tilePos.y + halfTile - halfDot);
+        //std::cout << "Dot Position " << dotPos.x << " " << dotPos.y << std::endl;
+        GameObject* d = new GameObject(dotPos, glm::vec2(TILE_SIZE / 4.0f), TILE_SIZE, pxSprite);
+        dots.push_back(d);
+
+    }
+    dotInput.close();
+}
+void Game::BuildWalls() {
     std::vector<Texture2D> grayWallSprites = { ResourceManager::GetTexture("px")};
-
-
     std::string line;
     std::ifstream wallInput;
 
-    wallInput.open("/home/jacob/source/pacman/util/walls.txt");
-
-    if (!wallInput.is_open()) {
-        std::cout <<"WALL FILE DID NOT OPEN" << std::endl;
-    }
-
-    //std::array<std::array<std::string, 4>, 32> wallTiles;
+    // read file into 2d vector of walls
     std::vector<std::vector<int>> wallTiles;
     std::vector<int> wall;
+    
+    wallInput.open("/home/jacob/source/pacman/util/wallsOut.txt");
+    if (!wallInput.is_open())
+        std::cout <<"WALL FILE DID NOT OPEN" << std::endl;
+
 
     while (std::getline (wallInput, line)) {
-
-        //wall.push_back(std::stoi(num));
-        std::cout << "Line: " << line << std::endl;
-
         std::string num;
         for (int i = 0; i < line.size(); i++) {
-            if (line[i] != ' ' && line[i] != '\n') {
+            if (line[i] != ' ' && line[i] != '\n')
                 num += line[i];
-            }
             else {
-                //std::cout << num << std::endl;
                 wall.push_back(std::stoi(num));
                 num = "";
             }
         }
-        //std::cout << num << std::endl;
         wall.push_back(std::stoi(num));
-        //num = "";
-
-
         wallTiles.push_back(wall);
         wall.clear();
-
-        if (wall.size() == 4) {
-            wallTiles.push_back(wall);
-            std::cout << "Added wall: " << wall[0] << wall[1] << wall[2]<< wall[3] << std::endl;
-            wall.clear();
-
-        }
     }
-
     wallInput.close();
 
+    // construct all walls in 2D vector
+    for (int i = 0; i < wallTiles.size(); i++) {
+        glm::vec2 pos(wallTiles[i][0] * TILE_SIZE, wallTiles[i][1] * TILE_SIZE);
+        glm::vec2 size(wallTiles[i][2] * TILE_SIZE, wallTiles[i][3] * TILE_SIZE);
+        //Wall* w = new Wall(pos, size, grayWallSprites, i);
+        GameObject* w = new GameObject(pos, size, TILE_SIZE, grayWallSprites);
+        walls.push_back(w);
+    }
+}
 
-    // for (int i = 0; i < wallTiles.size(); i++) {
-    //     for (int j = 0; j < wallTiles[i].size(); j++) {
-    //         std::cout << wallTiles[i][j] * TILE_SIZE << ' ';
+std::vector<std::string> Game::Split(std::string s) {
+    std::vector<std::string> res;
+    std::string part;
+    for (int i = 0; i < s.size(); i++) {
+
+        if (!std::isspace(s[i])) {
+            part += s[i];
+        }
+        else {
+            if (part != "") {
+                res.push_back(part);
+            }
+            part = "";
+        }
+    }
+    if (part != "" && !std::isspace(part[0])) {
+        res.push_back(part);
+    }
+    return res;
+
+}
+void Game::PrintVector(std::vector<std::string> v) {
+
+    std::cout << "<";
+    for (int i = 0; i < v.size(); i++) {
+        if (i != v.size()-1) {
+            std::cout << v[i] << ", ";
+        }
+        else {
+            std::cout << v[i];
+        }
+    }
+    std::cout<<">\n";
+}
+void Game::Init() {
+
+
+    //ResourceManager::LoadTexture("textures/pacmanNew1.png", true, "pacman");
+    //ResourceManager::LoadTexture("textures/pacmanNew2.png", true, "pacman2");
+    ResourceManager::LoadTexture("textures/pacmanNew1.png", true, "pacman1");
+    ResourceManager::LoadTexture("textures/finalPacman2.png", true, "pacman2");
+    ResourceManager::LoadTexture("textures/pacmanNew2.png", true, "pacman3");
+
+    ResourceManager::LoadTexture("textures/map.png", false, "walls");
+    ResourceManager::LoadTexture("textures/mapTiles.png", true, "mapTiles");
+
+    ResourceManager::LoadTexture("textures/grayWall.png", true, "grayWall");
+    ResourceManager::LoadTexture("textures/px.png", true, "px");
+    ResourceManager::LoadTexture("textures/map224x248.png", true, "map224x248");
+
+    ResourceManager::LoadTexture("textures/ghost.png", true, "ghost");
+    ResourceManager::LoadTexture("textures/eyesRight.png", true, "eyesRight");
+    ResourceManager::LoadTexture("textures/eyesUp.png", true, "eyesUp");
+    ResourceManager::LoadTexture("textures/eyesLeft.png", true, "eyesLeft");
+    ResourceManager::LoadTexture("textures/eyesDown.png", true, "eyesDown");
+    
+
+    
+    std::vector<Texture2D> wallSprites = { ResourceManager::GetTexture("map224x248")};
+    std::vector<Texture2D> mapTilesSprite = { ResourceManager::GetTexture("mapTiles")};
+
+    glm::vec2 mapSize = glm::vec2(224.0f * RESOLUTION_SCALE, 248.0f * RESOLUTION_SCALE);
+    glm::vec2 mapPos = glm::vec2(this->Width/2.0f - mapSize.x/2.0f, 0.0f);
+
+    Background = new GameObject(mapPos, mapSize, TILE_SIZE, wallSprites, 1.0f, glm::vec3(1.0f), 1.0f, glm::vec3(0.0f), std::string("wall"));
+    MapTiles = new GameObject(mapPos, mapSize, TILE_SIZE, mapTilesSprite, 1.0f, glm::vec3(1.0f), 0.25f, glm::vec3(0.0f), std::string("wall"));
+    BuildWalls();
+    BuildDots();
+
+    map = BuildMap();
+
+    // for (int i = 0; i < this->Map.size(); i++) {
+    //     PrintVector(this->Map)
+    // }
+    
+
+    // for (int i = 0; i < this->Map.size(); i++) {
+    //     for (int j = 0; j < this->Map[i].size(); j++) {
+    //         std::cout << this->Map[i][j] << ' ';
         
     //     }
     //     std::cout << '\n';
@@ -149,132 +300,43 @@ void Game::Init() {
     //w = Wall(glm::vec2(0.0f), glm::vec2(50.0f), grayWallSprites, 0);
 
     //std::vector<Wall*> walls;
-    for (int i = 0; i < wallTiles.size(); i++) {
-        //std::cout << wallTiles[i][j] * TILE_SIZE << ' ';
-
-        glm::vec2 pos(wallTiles[i][0] * TILE_SIZE, wallTiles[i][1] * TILE_SIZE);
-        glm::vec2 size(wallTiles[i][2] * TILE_SIZE, wallTiles[i][3] * TILE_SIZE);
-        Wall* w = new Wall(pos, size, grayWallSprites, i);
-        std::cout << "Wall created" << std::endl;
-        walls.push_back(w);
-    
-    }
-
-       // std::cout << text << std::endl;
-        // std::array<std::string, 4> wall;
-        // std::string part;
-
-        // int wallIdx = 0;
-        // for (int i = 0; i < text.size(); i++) {
-        //     std::cout << text[i] << std::endl;
-        //     if (text[i] == ' ') {
-                
-        //     }
-        //     num += text[i];
-        // }
-
-    //std::tuple<5, 5>
-    // store all wall positions (don't store symmetrical walls)1
-    
-    // 20 horizontal tile lines
-    std::array<float, 20> hLines = {
-        38.0f, 99.0f, 151.0f
-        //0.0f, 0.0f
-    };
-
-    // 17 vertical tile lines
-    std::array<float, 17> vLines = {
-        70.5f, 133.0f, 215.0f
-    };
-
-    for (int i = 3; i < 20; i++) {
-        float diff = (i % 2 == 1) ? 60.0f : 24.5f;
-
-        hLines[i] = hLines[i-1] + diff;
-        if (i < 15) {
-            vLines[i] = vLines[i-1] + diff;
-        }
-    }
-    // add last two vert lines that don't match 
-    vLines[15] = 780.0f;
-    vLines[16] = 838.0f;
-
-
-    // for (int i = 0; i < hLines.size(); i++) {
-    //     wallInfo[i] = std::make_tuple(glm::vec2(70.5f, hLines[i]), glm::vec2(mapSize.x/2.0f, wallWidth));
-    // }
-    // for (int i = 0; i < vLines.size(); i++) {
-    //     wallInfo[i+hLines.size()] = std::make_tuple(glm::vec2(vLines[i], 38.0f), glm::vec2(wallWidth, mapSize.y/2.0f));
-    // } 
-
-    // make walls
-
-
-    // // top wall
-    // std::array<std::tuple<glm::vec2, glm::vec2>, 25> wallInfo = {
-    //     AssembleWallInfo(vLines[0], hLines[0], vLines[16], hLines[0]),
-    //     AssembleWallInfo(vLines[1], hLines[1], vLines[2], hLines[1]),
-    //     AssembleWallInfo(vLines[3], hLines[1], vLines[6], hLines[1]),
-    //     AssembleWallInfo(vLines[1], hLines[2], vLines[2], hLines[2]),
-    //     AssembleWallInfo(vLines[3], hLines[2], vLines[6], hLines[2]),
-    //     AssembleWallInfo(vLines[1], hLines[3], vLines[2], hLines[3]),
-    //     AssembleWallInfo(vLines[1], hLines[4], vLines[2], hLines[4]),
-    //     AssembleWallInfo(vLines[0], hLines[5], vLines[2], hLines[5]), 
-    //     AssembleWallInfo(vLines[4], hLines[5], vLines[6], hLines[5]),
-    //     AssembleWallInfo(vLines[4], hLines[6], vLines[6], hLines[6]),
-        
-    //     // bottom half
-    //     AssembleWallInfo(vLines[0], hLines[12], vLines[2], hLines[12]), 
-    //     AssembleWallInfo(vLines[1], hLines[13], vLines[2], hLines[13]), 
-    //     AssembleWallInfo(vLines[1], hLines[14], vLines[2], hLines[14]), 
-    //     AssembleWallInfo(vLines[0], hLines[15], vLines[1], hLines[15]), 
-    //     AssembleWallInfo(vLines[0], hLines[16], vLines[1], hLines[16]), 
-    //     AssembleWallInfo(vLines[1], hLines[17], vLines[3], hLines[17]), 
-    //     AssembleWallInfo(vLines[1], hLines[18], vLines[6], hLines[18]), 
-    //     AssembleWallInfo(vLines[3], hLines[3], vLines[4], hLines[3]), 
-    //     AssembleWallInfo(vLines[3], hLines[12], vLines[4], hLines[12]), 
-    //     AssembleWallInfo(vLines[3], hLines[15], vLines[4], hLines[15]), 
-    //     AssembleWallInfo(vLines[3], hLines[13], vLines[6], hLines[13]),
-    //     AssembleWallInfo(vLines[3], hLines[14], vLines[6], hLines[14]),
-    //     std::make_tuple(glm::vec2(vLines[0], hLines[0]), glm::vec2(vLines[16]-vLines[0], wallWidth)),
-    // std::make_tuple(glm::vec2(vLines[0], hLines[0]), glm::vec2(vLines[16]-vLines[0], wallWidth)),
-    //};
-
-
-    // for (int i = 0; i < wallInfo.size(); i++) {
-    //     glm::vec2 pos = std::get<0>(wallInfo[i]);
-
-    //     glm::vec2 size = std::get<1>(wallInfo[i]);
-
-    //     Wall* tmpWall = new Wall(pos, size, grayWallSprites, i);
-    //     walls.push_back(tmpWall);
-    // };
 
 
 
+    std::vector<Texture2D> pxSprite = { ResourceManager::GetTexture("px")};
 
+    CurrentSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "upSensor");
+    QueuedSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "upSensor");
+    GhostMapTarget = new GameObject(glm::vec2(0.0f), glm::vec2(TILE_SIZE), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostMapTarget");
+    GhostAdjTarget = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostAdjTarget");
 
- 
+    glm::vec2 startingTileCenter = glm::vec2(13.0f * TILE_SIZE + TILE_SIZE/2.0f, 23.0f * TILE_SIZE + TILE_SIZE/2.0f);
 
+    // glm::vec2 playerPos = glm::vec2(
+    //     this->Width/2.0f - PLAYER_SIZE.x/2.0f,
+    //     552.0f
+    //     //544.226f // got by logging pacman's position while in correct row
+    // );
 
-    // Wall = new GameObject(glm::vec2(70.5f, 0.0f), glm::vec2(2.0f, 200.0f), grayWallSprites, 1.0f, glm::vec3(1.0f), glm::vec3(0.0f), std::string("grayWall"));
-    // Wall2 = new GameObject(glm::vec2(this->Width-70.5f, 0.0f), glm::vec2(2.0f, 200.0f), grayWallSprites, 1.0f, glm::vec3(1.0f), glm::vec3(0.0f), std::string("grayWall"));
-    // walls.push_back(Wall);
-    // walls.push_back(Wall2);
-    CurrentSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), grayWallSprites, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), glm::vec2(0.0f), "upSensor");
-    QueuedSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), grayWallSprites, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), glm::vec2(0.0f), "upSensor");
-    
-
-    glm::vec2 playerPos = glm::vec2(
-        this->Width/2.0f - PLAYER_SIZE.x/2.0f + 40.0f,
-        this->Height/2.0f - PLAYER_SIZE.y/2.0f
-    );
+    glm::vec2 playerPos = glm::vec2(startingTileCenter.x-PLAYER_SIZE.x/2.0f, startingTileCenter.y-PLAYER_SIZE.y/2.0f);
 
     std::vector<Texture2D> sprites = {
-        ResourceManager::GetTexture("pacman"),
-        ResourceManager::GetTexture("pacman2")
+        ResourceManager::GetTexture("pacman1"),
+        ResourceManager::GetTexture("pacman3"),
     };
-    Player = new PlayerObject(playerPos, PLAYER_SIZE, glm::vec2(PLAYER_VELOCITY), sprites, 0.25f, std::string("player"));
+    Player = new PlayerObject(playerPos, PLAYER_SIZE, TILE_SIZE, glm::vec2(PLAYER_VELOCITY), sprites, 0.25f, std::string("player"));
+
+    std::vector<Texture2D> ghostSprite = {
+        ResourceManager::GetTexture("ghost")
+    };
+    std::vector<Texture2D> eyeSprites = {
+        ResourceManager::GetTexture("eyesRight"),
+        ResourceManager::GetTexture("eyesUp"),
+        ResourceManager::GetTexture("eyesLeft"),
+        ResourceManager::GetTexture("eyesDown"),
+    };
+    RedGhost = new Ghost(playerPos, GHOST_SIZE, glm::vec2(PLAYER_VELOCITY), ghostSprite, 0.25f, std::string("RedGhost"), TILE_SIZE, Player, map, GhostMapTarget, GhostAdjTarget);
+    RedGhostEyes = new Eyes(RedGhost, TILE_SIZE, eyeSprites);
 
     // load shaders
     ResourceManager::LoadShader("shaders/default.vert", "shaders/default.frag", nullptr, "sprite"); 
@@ -306,11 +368,20 @@ std::tuple<glm::vec2, glm::vec2> Game::AssembleWallInfo(float x1, float y1, floa
 
 }
 
+
 void Game::Update(float dt) {
     Player->Update(dt, 224.0f * RESOLUTION_SCALE);
-    //Wall->Update(dt);
+    RedGhost->Update(dt, Player);
+    RedGhostEyes->Update(dt);
 
+    //std::cout << "Ghost: " << RedGhost->Position.x << " " << RedGhost->Position.y << std::endl;
+    //std::cout << CurrentSensor->Position.x << " " << CurrentSensor->Position.y << std::endl;
+    //std::cout << TILE_SIZE * << std::endl;
+
+    //Wall->Update(dt);
+    
     HandleCollisions();
+
     //Player->Move(dt);
     //PrintFPS(dt);
 }
@@ -324,61 +395,127 @@ void Game::HandleCollisions() {
     };
 
     //bool collision = CheckPlayerWallCollision();
+    HandleDotCollisions();
 
     bool queuedCollision = CheckPlayerWallCollision(Player->QueuedDirection);
     bool currentCollision = CheckPlayerWallCollision(Player->CurrentDirection);
-
+    bool snapBothAxes;
     if (!queuedCollision) {
+        
+        // if ((Player->CurrentDirection != Player->QueuedDirection) &&
+        //     (dirToVec(Player->CurrentDirection) != -dirToVec(Player->QueuedDirection)))
+        // {   
+        if (Player->CurrentDirection == Player->QueuedDirection) {
+            
+            SnapPlayerToGrid(Player->QueuedDirection, snapBothAxes = false);
+        }
+        //}
         Player->CurrentDirection = Player->QueuedDirection;
         //Player->QueuedDirection = NONE;
         Player->Rotation = dirToRot[Player->CurrentDirection];
+
     }
 
 
     if (currentCollision) {
+        SnapPlayerToGrid(Player->CurrentDirection, snapBothAxes = true);
         Player->CurrentDirection = NONE;
+        
+        
+        
+        // SNAP PLAYER CENTER to grid, therefore updating current sensor
+        // calc diff in player center and tile center, then offset player pos by that amount
+
+        // use floor to determine which row we are on
+
+
     }
 
 
 
 }
 
+void Game::HandleDotCollisions() {
+    bool collision;
+    glm::vec2 playerCenterBoxPos(Player->Position + (Player->Size / 4.0f));
+    glm::vec2 playerHalfSize = (Player->Size / 2.0f);
+    for (int i = 0; i < dots.size(); i++) {
+        collision = CheckCollision(playerCenterBoxPos, playerHalfSize, dots[i]->Position, dots[i]->Size);
+        if (collision && !dots[i]->Destroyed) {
+            dots[i]->Destroyed = true;
+            remainingDots -= 1;
+            if (remainingDots <= 0) {
+                Win();
+            }
+        }
+    }
+}
+
+void Game::Win() {
+    std::cout << "===================" << std::endl;
+    std::cout << "P L A Y E R   W I N" << std::endl;
+    std::cout << "===================" << std::endl;
+}
+
+void Game::SnapPlayerToGrid(Direction direction, bool bothAxes) {
+
+    
+    glm::vec2 prevPlayerPosition = Player->Position;
+    // snap player to correct position for tile
+    glm::vec2 currTilePos = glm::vec2(Player->Col * TILE_SIZE, Player->Row * TILE_SIZE);
+    glm::vec2 currTileCenter = glm::vec2(currTilePos.x+TILE_SIZE/2.0f, currTilePos.y+TILE_SIZE/2.0f);
+
+    if (direction == UP || direction == DOWN || bothAxes) {
+        Player->Position = glm::vec2(currTileCenter.x-Player->Size.x/2.0f, Player->Position.y);// + dirToVec(Player->CurrentDirection);
+
+    }
+    else if (direction == LEFT || direction == RIGHT || bothAxes) {
+        Player->Position = glm::vec2(Player->Position.x, currTileCenter.y-Player->Size.y/2.0f);// + dirToVec(Player->CurrentDirection);
+
+    }
+    //Player->Position = glm::vec2(currTileCenter.x-Player->Size.x/2.0f, currTileCenter.y-Player->Size.y/2.0f);// + dirToVec(Player->CurrentDirection);
+
+
+    if (prevPlayerPosition != Player->Position) {
+        // std::cout << "Snap Direction: " << direction << std::endl;
+        // std::cout << "Snapped from: " << prevPlayerPosition.x << " " << prevPlayerPosition.y << std::endl;
+        // std::cout << "Snapped to: " << Player->Position.x << " " << Player->Position.y << std::endl;
+
+    }
+}
 // function will return true or false if there is a collision in that sensor direction
 bool Game::CheckPlayerWallCollision(Direction direction) {
 
     glm::vec2 sensorPos;
     glm::vec2 sensorSize;
+    float sensorWidth = 1.0f;
+    glm::vec2 playerCenter(Player->Position.x + Player->Size.x/2.0f, Player->Position.y + Player->Size.y/2.0f);
+    float halfTile = TILE_SIZE / 2.0f;
     float sensorPad = 1.0f;
     if (direction == RIGHT) { 
-        sensorPos = glm::vec2(Player->Position.x + Player->Size.x + sensorPad, Player->Position.y);
-        sensorSize = glm::vec2(1.0f, Player->Size.y);
-        sensorSize = glm::vec2(1.0f, 1.0f);
+        sensorPos = glm::vec2(playerCenter.x + halfTile, playerCenter.y - halfTile + sensorPad);
+        sensorSize = glm::vec2(sensorWidth, TILE_SIZE - sensorPad*2);
     }
     else if (direction == UP) {
-        sensorPos = glm::vec2(Player->Position.x, Player->Position.y - sensorPad);
-        sensorSize = glm::vec2(Player->Size.x, 1.0f);
-        sensorSize = glm::vec2(1.0f, 1.0f);
+        sensorPos = glm::vec2(playerCenter.x - halfTile + sensorPad, playerCenter.y - halfTile);
+        sensorSize = glm::vec2(TILE_SIZE-sensorPad*2, sensorWidth);
     }
     else if (direction == LEFT) {
-        sensorPos = glm::vec2(Player->Position.x - sensorPad, Player->Position.y);
-        sensorSize = glm::vec2(1.0f, Player->Size.y);
-        sensorSize = glm::vec2(1.0f, 1.0f);
+        sensorPos = glm::vec2(playerCenter.x - halfTile, playerCenter.y - halfTile + sensorPad);
+        sensorSize = glm::vec2(sensorWidth, TILE_SIZE-sensorPad*2);
     }
     else if (direction == DOWN) {
-        sensorPos = glm::vec2(Player->Position.x, Player->Position.y + Player->Size.y + sensorPad);
-        sensorSize = glm::vec2(Player->Size.x, 1.0f);
-        sensorSize = glm::vec2(1.0f, 1.0f);
+        sensorPos = glm::vec2(playerCenter.x - halfTile + sensorPad, playerCenter.y + halfTile);
+        sensorSize = glm::vec2(TILE_SIZE-sensorPad*2, sensorWidth);
     }
 
     if (direction == Player->CurrentDirection) {
         CurrentSensor->Position = sensorPos;
         CurrentSensor->Size = sensorSize;
-        //std::cout << "Moving current sensor" << std::endl;
     }
     if (direction == Player->QueuedDirection) {
         QueuedSensor->Position = sensorPos;
         QueuedSensor->Size = sensorSize;
-        //std::cout << "Moving queued sensor" << std::endl;
     }
 
     // loop through all walls
@@ -389,100 +526,6 @@ bool Game::CheckPlayerWallCollision(Direction direction) {
     }
     return false;
 }
-
-// bool Game::CheckPlayerWallCollision() {
-    
-//     float sensorPad = 1.0f;
-//     // right sensor
-//     glm::vec2 rightSensorPos = glm::vec2(
-//         Player->Position.x + Player->Size.x + sensorPad,
-//         Player->Position.y
-//     );
-//     // up sensor
-//     glm::vec2 upSensorPos = glm::vec2(
-//         Player->Position.x,
-//         Player->Position.y - sensorPad
-//     );
-//     // left sensor
-//     glm::vec2 leftSensorPos = glm::vec2(
-//         Player->Position.x - sensorPad,
-//         Player->Position.y
-//     );
-
-//     glm::vec2 downSensorPos = glm::vec2(
-//         Player->Position.x,
-//         Player->Position.y + (Player->Size.y) + sensorPad
-//     );
-//     RightSensor->Position = rightSensorPos;
-//     RightSensor->Size = glm::vec2(3.0f, Player->Size.y);
-    
-//     UpSensor->Position = upSensorPos;
-//     UpSensor->Size = glm::vec2(Player->Size.x, 3.0f);
-
-//     LeftSensor->Position = leftSensorPos;
-//     LeftSensor->Size = glm::vec2(3.0f, Player->Size.y);
-
-//     DownSensor->Position = downSensorPos;
-//     DownSensor->Size = glm::vec2(Player->Size.x, 3.0f);
-
-    
-//     // check collision of queued direction
-
-
-
-//     // and check collision of current direction
-
-//     //std::cout << "Player: " << Player->Position.x << " " << Player->Position.y << " Sensor: " << rightSensorPos.x << " " << rightSensorPos.y << std::endl;
-//     bool rightCollision = CheckCollision(rightSensorPos, glm::vec2(1.0f, Player->Size.y), Wall->Position, Wall->Size);
-//     bool upCollision = CheckCollision(upSensorPos, glm::vec2(Player->Size.x, 1.0f), Wall->Position, Wall->Size);
-//     bool leftCollision = CheckCollision(leftSensorPos, glm::vec2(1.0f, Player->Size.y), Wall->Position, Wall->Size);
-//     bool downCollision = CheckCollision(downSensorPos, glm::vec2(Player->Size.x, 1.0f), Wall->Position, Wall->Size);
-
-
-//     if (!rightCollision && Player->QueuedDirection == glm::vec2(1.0f, 0.0f)) {
-//         Player->CurrentDirection = Player->QueuedDirection;
-//         Player->QueuedDirection = glm::vec2(0.0f);
-//         Player->Rotation = 0.0f;
-//     }
-//     else if (!leftCollision && Player->QueuedDirection == glm::vec2(-1.0f, 0.0f)) {
-//         Player->CurrentDirection = Player->QueuedDirection;
-//         Player->QueuedDirection = glm::vec2(0.0f);
-//         Player->Rotation = 180.0f;
-//     }
-
-//     else if (!upCollision && Player->QueuedDirection == glm::vec2(0.0f, -1.0f)) {
-//         Player->CurrentDirection = Player->QueuedDirection;
-//         Player->QueuedDirection = glm::vec2(0.0f);
-//         Player->Rotation = 270.0f;
-//     }
-
-//     else if (!downCollision && Player->QueuedDirection == glm::vec2(0.0f, 1.0f)) {
-//         Player->CurrentDirection = Player->QueuedDirection;
-//         Player->QueuedDirection = glm::vec2(0.0f);
-//         Player->Rotation = 90.0f;
-//     }
-
-//     if (rightCollision && Player->CurrentDirection == glm::vec2(1.0f, 0.0f)) {
-//         Player->CurrentDirection = glm::vec2(0.0f);
-//     }
-//     else if (upCollision && Player->CurrentDirection == glm::vec2(0.0f, -1.0f)) {
-//         Player->CurrentDirection = glm::vec2(0.0f);
-//     }
-//     else if (leftCollision && Player->CurrentDirection == glm::vec2(-1.0f, 0.0f)) {
-//         Player->CurrentDirection = glm::vec2(0.0f);
-//     }
-//     else if (downCollision && Player->CurrentDirection == glm::vec2(0.0f, 1.0f)) {
-//         Player->CurrentDirection = glm::vec2(0.0f);
-//     }
-
-
-//     // if (rightCollision || upCollision || leftCollision|| downCollision) {
-//     //     Player->CurrentDirection = glm::vec2(0.0f);
-//     //     return true;
-//     // }
-
-//     return false;
-// }
 
 bool Game::CheckCollision(glm::vec2 onePos, glm::vec2 oneSize, glm::vec2 twoPos, glm::vec2 twoSize) {
     return (((
@@ -530,28 +573,29 @@ void Game::Render() {
         return;
     }
     Background->Draw(*Renderer);
+    MapTiles->Draw(*Renderer);
 
     //w.Draw(*Renderer);
+    // std::cout << walls.size() << std::endl;
     for (int i = 0; i < walls.size(); i++) {
-        std::cout << "Drawing walls" << std::endl;
-        std::cout << walls.size() << std::endl;
-        walls[i]->Draw(*Renderer);
+        //walls[i]->Draw(*Renderer);
+    }
+    for (int i = 0; i < dots.size(); i++) {
+        if (!dots[i]->Destroyed)
+            dots[i]->Draw(*Renderer);
     }
     //Wall->Draw(*Renderer);
     //Wall2->Draw(*Renderer);
     
 
     Player->Draw(*Renderer);
+    RedGhost->Draw(*Renderer);
+    RedGhostEyes->Draw(*Renderer, RedGhostEyes->currSprite);
+    GhostMapTarget->Draw(*Renderer);
+    GhostAdjTarget->Draw(*Renderer);
 
     QueuedSensor->Draw(*Renderer);
     CurrentSensor->Draw(*Renderer);
-
-
-
-    // seg fault Renderer->DrawSprite(ResourceManager::GetTexture("background"),
-    // glm::vec2(0.0f, 0.0f), glm::vec2(this->Width, this->Height), 0.0f
-    // );
-
    
 }
 

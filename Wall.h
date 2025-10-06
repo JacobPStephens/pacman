@@ -8,7 +8,7 @@
 class Wall : public GameObject {
 
     public:
-        Wall(glm::vec2 pos, glm::vec2 size, std::vector<Texture2D> sprites, int id);
+        Wall(glm::vec2 pos, glm::vec2 size, const float tileSize, std::vector<Texture2D> sprites, int id);
         
 };
 

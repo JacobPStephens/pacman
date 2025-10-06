@@ -13,4 +13,6 @@ enum Direction {
 
 glm::vec2 dirToVec(Direction direction);
 
+Direction oppositeDirection(Direction direction);
+
 #endif

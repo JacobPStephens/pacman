@@ -36,17 +36,31 @@ class Game {
         // initialize shaders, textures, levels
         void Init();
 
+        void BuildWalls();
+        void BuildDots();
+        void BuildTiles();
+
+        std::vector<std::vector<int>>* BuildMap();
+
+        std::vector<std::string> Split(std::string);
+        void PrintVector(std::vector<std::string>);
+        void Win();
+
         // core game loop
         void ProcessInput(float dt);
         void Update(float dt);
 
+        GameObject* GhostMapTarget;
+
         std::tuple<glm::vec2, glm::vec2> AssembleWallInfo(float x1, float y1, float x2, float y2);
         void HandleCollisions();
+        void HandleDotCollisions();
 
         bool CheckPlayerWallCollision(Direction direction);
-
+        void SnapPlayerToGrid(Direction direction, bool bothAxes);
         bool CheckCollision(glm::vec2 onePos, glm::vec2 oneSize, glm::vec2 twoPos, glm::vec2 twoSize);
         void Render();
+
 
 };
 

@@ -15,8 +15,10 @@ class PlayerObject : public GameObject {
 
         Direction CurrentDirection;
         Direction QueuedDirection;
+        int Row;
+        int Col;
         PlayerObject();
-        PlayerObject(glm::vec2 pos, glm::vec2 size, glm::vec2 velocity, std::vector<Texture2D> sprites, float cycleLength, std::string name);
+        PlayerObject(glm::vec2 pos, glm::vec2 size, const float tileSize, glm::vec2 velocity, std::vector<Texture2D> sprites, float cycleLength, std::string name);
 
         void Update(float dt, float screenWidth);
         glm::vec2 Move(float dt, float screenWidth);

@@ -11,8 +11,12 @@
 
 class GameObject {
     public:
-        glm::vec2 Position, Size, Velocity;
+        glm::vec2 Position, CenterPos, Size, Velocity;
         glm::vec3 Color;
+        float TILE_SIZE;
+        int Row;
+        int Col;
+        float Alpha;
 
         std::string Name;
 
@@ -27,11 +31,12 @@ class GameObject {
 
         // constructors
         GameObject();
-        GameObject(glm::vec2 position, glm::vec2 size, std::vector<Texture2D> sprites, float cycleLength, glm::vec3 color = glm::vec3(1.0f), glm::vec2 velocity = glm::vec2(0.0f), std::string name = "");
+        GameObject(glm::vec2 position, glm::vec2 size, const float tileSize, std::vector<Texture2D> sprites);
+        GameObject(glm::vec2 position, glm::vec2 size, const float tileSize, std::vector<Texture2D> sprites, float cycleLength, glm::vec3 color = glm::vec3(1.0f), float alpha = 1.0f, glm::vec2 velocity = glm::vec2(0.0f), std::string name = "");
 
         void Update(float dt);
         // draw sprite (confused about virtual)
-        virtual void Draw(SpriteRenderer &renderer);
+        virtual void Draw(SpriteRenderer &renderer, int frame = -1);
 };
 
 #endif

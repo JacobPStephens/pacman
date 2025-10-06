@@ -41,7 +41,7 @@ void SpriteRenderer::initRenderData() {
 
 }
 
-void SpriteRenderer::DrawSprite(Texture2D &texture, glm::vec2 position, glm::vec2 size, float rotate, glm::vec3 color) {
+void SpriteRenderer::DrawSprite(Texture2D &texture, glm::vec2 position, glm::vec2 size, float rotate, glm::vec3 color, float alpha) {
     this->shader.Use();
     // initialize model matrix as identity
     glm::mat4 model = glm::mat4(1.0);
@@ -57,6 +57,7 @@ void SpriteRenderer::DrawSprite(Texture2D &texture, glm::vec2 position, glm::vec
     // updates uniform variables
     this->shader.SetMatrix4("model", model);
     this->shader.SetVector3f("spriteColor", color);
+    this->shader.SetFloat("spriteAlpha", alpha);
 
     glActiveTexture(GL_TEXTURE0);
     texture.Bind();
