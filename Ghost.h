@@ -11,7 +11,7 @@ class Ghost : public GameObject {
         Ghost(glm::vec2 pos, glm::vec2 size, glm::vec2 velocity, std::vector<Texture2D> sprites, float rotation, std::string name, float tileSize, PlayerObject* player, std::vector<std::vector<int>> *map, GameObject* ghostMapTarget, GameObject* ghostAdjTarget);
         ~Ghost();
         glm::vec2 targetPos;
-        float Speed = ((39.75f * tileSize) / 8.0f);
+        float Speed;
         float TILE_SIZE;
 
         std::vector<std::vector<int>>* Map;

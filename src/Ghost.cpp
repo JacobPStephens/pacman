@@ -11,7 +11,7 @@ Ghost::Ghost(glm::vec2 position, glm::vec2 size, glm::vec2 velocity, std::vector
     this->Map = map;
 
     // set attributes of ghost
-    this->Speed = ((39.75f * tileSize) / 8.0f);
+    this->Speed = ((39.75f * this->TILE_SIZE) / 8.0f);
     this->Row = 22;
     this->Col = 12;
 
