@@ -1,9 +1,19 @@
 #include "Eyes.h"
+#include "Ghost.h"
 #include <iostream>
 // ghost eyes dimensions are 5 width by 10 length
 
-Eyes::Eyes(Ghost* parentGhost, float tileSize, std::vector<Texture2D> sprites) 
-    :GameObject(glm::vec2(1.0f), glm::vec2(1.0f), tileSize, sprites, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), std::string("eyes"))
+static std::vector<Texture2D> GetSprites() {
+
+    return std::vector<Texture2D>{
+        ResourceManager::GetTexture("eyesRight"),
+        ResourceManager::GetTexture("eyesUp"),
+        ResourceManager::GetTexture("eyesLeft"),
+        ResourceManager::GetTexture("eyesDown"),
+    };
+}
+Eyes::Eyes(Ghost* parentGhost, float tileSize)
+    :GameObject(glm::vec2(1.0f), glm::vec2(1.0f), tileSize, GetSprites(), 1.0f, glm::vec3(1.0f, 1.0f, 1.0f), 1.0f, 0.0f, std::string("eyes"))
 {   
     this->parentGhost = parentGhost;
     this->CycleLength = 5.0f;

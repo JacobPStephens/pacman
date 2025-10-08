@@ -28,11 +28,17 @@ int remainingDots = 240; // CHANGE WHEN ADDING POWER DOTS
 
 // 256.074 RED GHOST SPAWN Y
 PlayerObject* Player;
-Ghost* RedGhost;
-Eyes* RedGhostEyes;
-GameObject* GhostMapTarget;
-GameObject* GhostAdjTarget;
+//Ghost* NewGhost;
 
+std::vector<Ghost*> Ghosts;
+// Ghost* RedGhost;
+// Eyes* RedGhostEyes;
+// GameObject* RedGhostMapTarget;
+// GameObject* RedGhostAdjTarget;
+// Ghost* PinkGhost;
+// Eyes* PinkGhostEyes;
+// GameObject* PinkGhostMapTarget;
+// GameObject* PinkGhostAdjTarget;
 
 //GameObject* Wall;
 //GameObject* Wall2;
@@ -45,23 +51,6 @@ std::vector<GameObject*> dots;
 GameObject* MapTiles;
 std::vector<std::vector<int>>* map;
 
-glm::vec2 dirToVec(Direction direction) {
-    switch (direction) {
-        case RIGHT:
-            return glm::vec2(1.0f, 0.0f);
-        case UP:
-            return glm::vec2(0.0f, -1.0f);
-        case LEFT:
-            return glm::vec2(-1.0f, 0.0f);
-        case DOWN:
-            return glm::vec2(0.0f, 1.0f);
-        default:
-            return glm::vec2(0.0f);
-    }
-}
-
-
-
 Game::Game(unsigned int width, unsigned int height) 
     : State(GAME_ACTIVE), Keys(), Width(width), Height(height) 
 {
@@ -72,10 +61,19 @@ Game::~Game() {
     delete Renderer;
     delete Player;
     delete map;
-    delete RedGhost;
-    delete RedGhostEyes;
-    delete GhostMapTarget;
-    delete GhostAdjTarget;
+    // delete RedGhost;
+    // delete RedGhostEyes;
+    // delete RedGhostMapTarget;
+    // delete RedGhostAdjTarget;
+    // delete PinkGhost;
+    // delete PinkGhostEyes;
+    // delete PinkGhostMapTarget;
+    // delete PinkGhostAdjTarget;
+    //delete NewGhost;
+
+    for (Ghost* ghost : Ghosts) {
+        delete ghost;
+    }
     //delete Wall;
     //delete Wall2;
     delete CurrentSensor;
@@ -277,38 +275,21 @@ void Game::Init() {
     glm::vec2 mapSize = glm::vec2(224.0f * RESOLUTION_SCALE, 248.0f * RESOLUTION_SCALE);
     glm::vec2 mapPos = glm::vec2(this->Width/2.0f - mapSize.x/2.0f, 0.0f);
 
-    Background = new GameObject(mapPos, mapSize, TILE_SIZE, wallSprites, 1.0f, glm::vec3(1.0f), 1.0f, glm::vec3(0.0f), std::string("wall"));
-    MapTiles = new GameObject(mapPos, mapSize, TILE_SIZE, mapTilesSprite, 1.0f, glm::vec3(1.0f), 0.25f, glm::vec3(0.0f), std::string("wall"));
+    Background = new GameObject(mapPos, mapSize, TILE_SIZE, wallSprites, 1.0f, glm::vec3(1.0f), 1.0f, 0.0f, std::string("wall"));
+    MapTiles = new GameObject(mapPos, mapSize, TILE_SIZE, mapTilesSprite, 1.0f, glm::vec3(1.0f), 0.25f, 0.0f, std::string("wall"));
     BuildWalls();
     BuildDots();
 
-    map = BuildMap();
-
-    // for (int i = 0; i < this->Map.size(); i++) {
-    //     PrintVector(this->Map)
-    // }
     
-
-    // for (int i = 0; i < this->Map.size(); i++) {
-    //     for (int j = 0; j < this->Map[i].size(); j++) {
-    //         std::cout << this->Map[i][j] << ' ';
-        
-    //     }
-    //     std::cout << '\n';
-    // }
-
-    //w = Wall(glm::vec2(0.0f), glm::vec2(50.0f), grayWallSprites, 0);
-
-    //std::vector<Wall*> walls;
-
-
-
+    map = BuildMap();
     std::vector<Texture2D> pxSprite = { ResourceManager::GetTexture("px")};
 
-    CurrentSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "upSensor");
-    QueuedSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "upSensor");
-    GhostMapTarget = new GameObject(glm::vec2(0.0f), glm::vec2(TILE_SIZE), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostMapTarget");
-    GhostAdjTarget = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostAdjTarget");
+    CurrentSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, 0.0f, "upSensor");
+    QueuedSensor = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, 0.0f, "upSensor");
+    // RedGhostMapTarget = new GameObject(glm::vec2(0.0f), glm::vec2(TILE_SIZE), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostMapTarget");
+    // RedGhostAdjTarget = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostAdjTarget");
+    // PinkGhostMapTarget = new GameObject(glm::vec2(0.0f), glm::vec2(TILE_SIZE), TILE_SIZE, pxSprite, 1.0f, glm::vec3(1.0f, 0.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostMapTarget");
+    // PinkGhostAdjTarget = new GameObject(glm::vec2(0.0f), glm::vec2(1.0f), TILE_SIZE, pxSprite, 1.0f, glm::vec3(0.0f, 1.0f, 1.0f), 1.0f, glm::vec2(0.0f), "ghostAdjTarget");
 
     glm::vec2 startingTileCenter = glm::vec2(13.0f * TILE_SIZE + TILE_SIZE/2.0f, 23.0f * TILE_SIZE + TILE_SIZE/2.0f);
 
@@ -324,20 +305,31 @@ void Game::Init() {
         ResourceManager::GetTexture("pacman1"),
         ResourceManager::GetTexture("pacman3"),
     };
-    Player = new PlayerObject(playerPos, PLAYER_SIZE, TILE_SIZE, glm::vec2(PLAYER_VELOCITY), sprites, 0.25f, std::string("player"));
+    Player = new PlayerObject(playerPos, PLAYER_SIZE, TILE_SIZE, PLAYER_VELOCITY, sprites, 0.25f, std::string("player"));
 
     std::vector<Texture2D> ghostSprite = {
         ResourceManager::GetTexture("ghost")
     };
-    std::vector<Texture2D> eyeSprites = {
+    std::vector<Texture2D> eyesSprites = {
         ResourceManager::GetTexture("eyesRight"),
         ResourceManager::GetTexture("eyesUp"),
         ResourceManager::GetTexture("eyesLeft"),
         ResourceManager::GetTexture("eyesDown"),
     };
-    RedGhost = new Ghost(playerPos, GHOST_SIZE, glm::vec2(PLAYER_VELOCITY), ghostSprite, 0.25f, std::string("RedGhost"), TILE_SIZE, Player, map, GhostMapTarget, GhostAdjTarget);
-    RedGhostEyes = new Eyes(RedGhost, TILE_SIZE, eyeSprites);
 
+    //NewGhost = new Ghost("red", Player, map, TILE_SIZE);
+
+    std::array<std::string, 4> ghostColors = { "red", "pink", "blue", "orange"};
+
+    for (std::string c : ghostColors) {
+        Ghosts.push_back(new Ghost(c , Player, map, TILE_SIZE));
+    }
+    // Ghosts.push_back(new Ghost("red", Player, map, TILE_SIZE));
+    // Ghosts.push_bac
+    // RedGhost = new Ghost(playerPos, GHOST_SIZE, glm::vec2(PLAYER_VELOCITY), ghostSprite, glm::vec3(1.0f, 0.0f, 0.0f), 1.0f, 0.25f, std::string("redGhost"), TILE_SIZE, Player, map, RedGhostMapTarget, RedGhostAdjTarget);
+    // RedGhostEyes = new Eyes(RedGhost, TILE_SIZE, eyesSprites);
+    // PinkGhost = new Ghost(playerPos, GHOST_SIZE, glm::vec2(PLAYER_VELOCITY), ghostSprite, glm::vec3(1.0f, 0.72f, 1.0f), 1.0f, 0.25f, std::string("pinkGhost"), TILE_SIZE, Player, map, PinkGhostMapTarget, PinkGhostAdjTarget);
+    // PinkGhostEyes = new Eyes(PinkGhost, TILE_SIZE, eyesSprites);
     // load shaders
     ResourceManager::LoadShader("shaders/default.vert", "shaders/default.frag", nullptr, "sprite"); 
     // configure shaders
@@ -369,10 +361,26 @@ std::tuple<glm::vec2, glm::vec2> Game::AssembleWallInfo(float x1, float y1, floa
 }
 
 
+
 void Game::Update(float dt) {
     Player->Update(dt, 224.0f * RESOLUTION_SCALE);
-    RedGhost->Update(dt, Player);
-    RedGhostEyes->Update(dt);
+
+    for (Ghost* ghost : Ghosts) {
+
+        if (ghost->Name == "blueGhost") {
+            ghost->Update(dt, Player, Ghosts.at(0));
+        }
+        else {
+            ghost->Update(dt, Player);
+        }
+
+
+    }
+    //NewGhost->Update(dt, Player);
+    // RedGhost->Update(dt, Player);
+    // RedGhostEyes->Update(dt);
+    // PinkGhost->Update(dt, Player);
+    // PinkGhostEyes->Update(dt);
 
     //std::cout << "Ghost: " << RedGhost->Position.x << " " << RedGhost->Position.y << std::endl;
     //std::cout << CurrentSensor->Position.x << " " << CurrentSensor->Position.y << std::endl;
@@ -413,6 +421,7 @@ void Game::HandleCollisions() {
         Player->CurrentDirection = Player->QueuedDirection;
         //Player->QueuedDirection = NONE;
         Player->Rotation = dirToRot[Player->CurrentDirection];
+        Player->Facing = Player->CurrentDirection;
 
     }
 
@@ -573,7 +582,7 @@ void Game::Render() {
         return;
     }
     Background->Draw(*Renderer);
-    MapTiles->Draw(*Renderer);
+    //MapTiles->Draw(*Renderer);
 
     //w.Draw(*Renderer);
     // std::cout << walls.size() << std::endl;
@@ -587,15 +596,28 @@ void Game::Render() {
     //Wall->Draw(*Renderer);
     //Wall2->Draw(*Renderer);
     
+    for (Ghost* ghost : Ghosts) {
+        ghost->Draw(*Renderer);
+        ghost->DebugMapTarget->Draw(*Renderer);
+        ghost->EyesObj->Draw(*Renderer, ghost->EyesObj->currSprite);
+    }
 
     Player->Draw(*Renderer);
-    RedGhost->Draw(*Renderer);
-    RedGhostEyes->Draw(*Renderer, RedGhostEyes->currSprite);
-    GhostMapTarget->Draw(*Renderer);
-    GhostAdjTarget->Draw(*Renderer);
+    // NewGhost->Draw(*Renderer);
+    // NewGhost->DebugMapTarget->Draw(*Renderer);
+    // NewGhost->EyesObj->Draw(*Renderer, NewGhost->EyesObj->currSprite);
+    // RedGhost->Draw(*Renderer);
+    // RedGhostEyes->Draw(*Renderer, RedGhostEyes->currSprite);
+    // RedGhostMapTarget->Draw(*Renderer);
+    // RedGhostAdjTarget->Draw(*Renderer);
+    // PinkGhost->Draw(*Renderer);
+    // PinkGhostEyes->Draw(*Renderer, PinkGhostEyes->currSprite);
+    // PinkGhostMapTarget->Draw(*Renderer);
+    // PinkGhostAdjTarget->Draw(*Renderer);
 
-    QueuedSensor->Draw(*Renderer);
-    CurrentSensor->Draw(*Renderer);
+
+    //QueuedSensor->Draw(*Renderer);
+    //CurrentSensor->Draw(*Renderer);
    
 }
 

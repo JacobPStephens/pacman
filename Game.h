@@ -13,6 +13,7 @@
 #include "Direction.h"
 
 
+
 enum GameState {
     GAME_ACTIVE,
     GAME_MENU,
@@ -25,7 +26,7 @@ class Game {
     public:
 
         GameState State;
-        
+        GameObject* DebugMapTarget;
 
         unsigned int Width, Height;
         bool Keys[1024];

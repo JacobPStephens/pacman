@@ -1,82 +1,143 @@
 #include "Ghost.h"
 #include <iostream>
 
+
+const glm::vec2 GHOST_SIZE_RATIO(14.0f/8.0f);
+const float GHOST_SPEED_RATIO(39.75f/ 8.0f);
 // TODO: Just got the map implemented as a field of the game class. Use that in this GetAdjDirection function.
 // Maybe clean up constuctor to only have what's necesary. I feel like I don't have to pass the map every update.
-Ghost::Ghost(glm::vec2 position, glm::vec2 size, glm::vec2 velocity, std::vector<Texture2D> sprites, float rotation, std::string name, float tileSize, PlayerObject* player, std::vector<std::vector<int>>* map, GameObject* ghostMapTarget, GameObject* ghostAdjTarget)
-    : GameObject(position, size, tileSize, sprites, 1.0f, glm::vec3(1.0f, 0.0f, 0.0f), 1.0f, glm::vec2(0.0f), std::string("ghost"))
-{ 
-    // game state variables
-    this->TILE_SIZE = tileSize; 
-    this->Map = map;
+std::map<std::string, glm::vec2> Ghost::ScatterTile= {
+    {"redGhost", glm::vec2(25.0f, -4.0f)},
+    {"pinkGhost", glm::vec2(2.0f, -4.0f)},
+    {"blueGhost", glm::vec2(27.0f, 31.0f)},
+    {"orangeGhost", glm::vec2(0.0f, 31.0f)}
+};
 
-    // set attributes of ghost
-    this->Speed = ((39.75f * this->TILE_SIZE) / 8.0f);
+
+
+std::array<float, 8> Ghost::GetScatterTimings(int level) {
+    assert(level >= 1 && "ERROR: Level must be at least 1");
+    if (level == 1) {
+        return std::array<float,8>{7.0f, 20.0f, 7.0f, 20.0f, 5.0f, 20.0f, 5.0f, 20.0f};
+    }
+    else if (level >= 2 && level <= 4) {
+        return std::array<float,8>{7.0f, 20.0f, 7.0f, 20.0f, 5.0f, 1033.0f, 0.0167f, 1000.0f};
+    }
+    return std::array<float,8>{5.0f, 20.0f, 5.0f, 20.0f, 5.0f, 1037.0f, 0.0167f, 1000.0f};
+    
+    
+};
+
+static glm::vec3 GetGhostColor(std::string name) {
+    glm::vec3 color;
+    if (name == "red")
+        color = glm::vec3(1.0f, 0.0f, 0.0f);
+    else if (name == "pink")
+        color = glm::vec3(1.0f, 0.72f, 1.0f);
+    else if (name == "blue")
+        color = glm::vec3(0.0f, 1.0f, 1.0f);
+    else if (name == "orange")
+        color = glm::vec3(1.0f, 0.72f, 0.325f);
+    return color;
+}
+
+std::array<float, 8> Ghost::ScatterTimings = Ghost::GetScatterTimings(1);
+float ModeTimer = Ghost::ScatterTimings[0];
+
+
+Ghost::Ghost(std::string name, GameObject* player, std::vector<std::vector<int>>* map, const float tileSize, Ghost* redGhost) 
+    : GameObject(
+        glm::vec2(0.0f),
+        glm::vec2(GHOST_SIZE_RATIO * tileSize),
+        tileSize,
+        std::vector<Texture2D>{ResourceManager::GetTexture("ghost")},
+        1.0f,
+        GetGhostColor(name),
+        1.0f,
+        GHOST_SPEED_RATIO * tileSize,
+        name + std::string("Ghost")
+    )
+{
+
+    this->TILE_SIZE = tileSize;
+    this->Map = map;
+    
     this->Row = 22;
     this->Col = 12;
 
-    // init movement logic variables
+    if (this->Name == "redGhost") {
+        this->Col += 2;
+    }
     glm::vec2 tileCenter = glm::vec2(this->Col, this->Row) * tileSize + tileSize/2.0f;
     this->Position = tileCenter - this->Size / 2.0f;
+    this->Dir = RIGHT;
     this->AdjTargetPos = glm::vec2(this->Col, this->Row);
+    this->MapTargetPos = player->Position;
 
-    // init debug target objects
-    this->ghostMapTarget = ghostMapTarget;
-    this->ghostMapTarget->Color = glm::vec3(1.0f, 0.0f, 0.0f);
-    this->ghostMapTarget->Size = glm::vec2(2.0f);
+    // this->AdjTargetPos = glm::vec2(this->Row, this->Col);
 
-    this->ghostAdjTarget = ghostAdjTarget;
-    this->ghostMapTarget->Color = glm::vec3(1.0f, 0.0f, 0.0f);
-    this->ghostAdjTarget->Size = glm::vec2(2.0f);
+    this->DebugMapTarget = new GameObject(
+        glm::vec2(0.0f), // position
+        glm::vec2(tileSize),
+        tileSize,
+        std::vector<Texture2D>{ResourceManager::GetTexture("px")},
+        1.0f,
+        GetGhostColor(name),
+        1.0f, 
+        0.0f,
+        name + "redMapTarget"
+    );
+    //Eyes(Ghost* parentGhost, float tileSize, std::vector<Texture2D> sprites);
 
-
+    this->EyesObj = new Eyes(this, this->TILE_SIZE);
 
 }
 
-// every time the ghost reaches a tile, we have to calculate a new direction.
+void Ghost::TurnAround(Direction currentDir, glm::vec2 currentAdjTarget) {
+    this->Dir = oppositeDirection(currentDir);
+    this->AdjTargetPos = currentAdjTarget + dirToVec(this->Dir);
 
-//// OPTION A
-// 1. detect when a ghost reaches a tile
-// 2. calculate new direction
-// 3. move in that direction until ghost reaches a new tile (fixed duration?)
+}
 
-//// OPTION B
-// 1. calculate new direction
-// 2. move in that direction for fixed length
-
-
-
-
-// speed = distance / time
-// time = distance / speed
-// time to move one tile = length of tile / speed of ghost
-// move for (length of tile) / (speed of ghost) seconds at (speed of ghost) speed
-
-void Ghost::Update(float deltaTime, PlayerObject* player) {
+void Ghost::Update(float deltaTime, PlayerObject* player, Ghost* redGhost) {
     GameObject::Update(deltaTime);
 
-    // set map target (ghost color dependent)
-    this->MapTargetPos = glm::vec2(player->Col, player->Row);
-    
-    // calculate row and column of ghost
+    this->EyesObj->Update(deltaTime);
+
     this->Row = floor(this->CenterPos.y/ (int)this->TILE_SIZE);
     this->Col = floor(this->CenterPos.x / (int)this->TILE_SIZE);
 
-    // draw debug sprites
-    ghostMapTarget->Position = this->MapTargetPos * this->TILE_SIZE;
-    ghostMapTarget->Size = glm::vec2(this->TILE_SIZE);
-    ghostAdjTarget->Position = (this->AdjTargetPos * this->TILE_SIZE) + (this->TILE_SIZE/2.0f);
-    
+    if (ModeTimer >= 0.0f) {
+        ModeTimer -= (deltaTime);
+    }
 
+    if (ModeTimer <= 0.0f) {
+        if (ModeIdx + 1 < Ghost::ScatterTimings.size()) {
+            CurrentMode = switchMode(CurrentMode);
+            TurnAround(this->Dir, this->AdjTargetPos);
+            std::cout << "Entered " << CurrentMode << std::endl;
+            ModeTimer = Ghost::ScatterTimings[ModeIdx+1];
+        }
+        else {
+            ModeTimer = Ghost::ScatterTimings[Ghost::ScatterTimings.size()-1];
+        }        
+    }
+
+    // set map target (ghost color dependent)
+    this->MapTargetPos = GetMapTarget(player->Row, player->Col, player->Facing, this->Name, Ghost::CurrentMode, redGhost);
+    
+    this->DebugMapTarget->Position = this->MapTargetPos * this->TILE_SIZE;
+    this->DebugMapTarget->Size = glm::vec2(this->TILE_SIZE);
 
     // if adj target reached, get new adj target and direction towards it
-    if (AdjTargetReached(glm::vec2(this->CenterPos.x, this->CenterPos.y), this->AdjTargetPos)) {
-        this->AdjTargetPos = GetAdjTarget(this->Position, this->Size, this->Dir, this->MapTargetPos, this->TILE_SIZE, this->Map);//this->Position, this->Size, this->Dir, this->MapTargetPos, tileSize, map);
-        this->Dir = GetDirection(this->Position, this->AdjTargetPos);
+    if (AdjTargetReached(glm::vec2(this->CenterPos.x, this->CenterPos.y), this->AdjTargetPos, this->TILE_SIZE)) {
+        //std::cout << "adj target reached" << std::endl;
+        this->AdjTargetPos = GetAdjTarget(this->Row, this->Col, this->Size, this->Dir, this->MapTargetPos, this->TILE_SIZE, this->Map);//this->Position, this->Size, this->Dir, this->MapTargetPos, tileSize, map);
+        this->Dir = GetDirection(this->Row, this->Col, this->AdjTargetPos);
     }
 
     // move ghost in correct direction
-    this->Position = Move(deltaTime, this->Position, this->Dir, this->Speed);   
+    this->Position = Move(deltaTime, this->Position, this->Dir, this->Velocity);   
 
 }
 
@@ -86,10 +147,45 @@ glm::vec2 Ghost::Move(float deltaTime, glm::vec2 pos, Direction dir, float speed
     return pos + dirToVec(dir) * speed * deltaTime;
 }
 
+glm::vec2 Ghost::GetMapTarget(int playerRow, int playerCol, Direction playerDir, std::string ghostName, Mode currentMode, Ghost* redGhost) {
+    //std::cout << "Inside GetMapTarget with name = " << ghostName << std::endl;
+
+    if (currentMode == SCATTER) {
+        return ScatterTile.at(ghostName);
+    }
+
+    if (ghostName == "redGhost") {
+        return glm::vec2(playerCol, playerRow);
+    }
+    else if (ghostName == "pinkGhost") {
+        glm::vec2 target = glm::vec2(playerCol, playerRow) + 4.0f * dirToVec(playerDir);
+        if (playerDir == UP) // replicate overflow bug in original
+            target += glm::vec2(-4.0f, 0.0f);
+        return target;
+    }
+    else if (ghostName == "blueGhost") {
+        int deltaX = redGhost->Col - playerCol;
+        int deltaY = redGhost->Row - playerRow;
+        glm::vec2 target = glm::vec2(playerCol - deltaX, playerRow - deltaY);
+        if (playerDir == UP) // replicate overflow bug in original
+            target += glm::vec2(-2.0f, -2.0f);
+        return target;
+    }
+    else if (ghostName == "orangeGhost") {
+        if (GetDistance(this->Col, this->Row, playerCol, playerRow) >= 8)
+            return glm::vec2(playerCol, playerRow);
+
+        //std::cout << EXAMPLE_INT << std::endl;
+        return ScatterTile.at("orangeGhost");
+    }
+    std::cout << "ERROR:: INVALID GHOST NAME" << std::endl;
+    return glm::vec2(0.0f);
+}
+
 /* Return if ghost has reached adjacent tile, given its center and target tile */
-bool Ghost::AdjTargetReached(glm::vec2 ghostCenter, glm::vec2 adjTargetPos) {
+bool Ghost::AdjTargetReached(glm::vec2 ghostCenter, glm::vec2 adjTargetPos, float tileSize) {
     // get target coordinates in pixels from target tile
-    glm::vec2 pixelTarget = (adjTargetPos * this->TILE_SIZE) + (this->TILE_SIZE/2.0f);
+    glm::vec2 pixelTarget = (adjTargetPos * tileSize) + (tileSize/2.0f);
 
     // compare ghost center to pixel coordinate
     float threshold = 0.01f;
@@ -100,15 +196,12 @@ bool Ghost::AdjTargetReached(glm::vec2 ghostCenter, glm::vec2 adjTargetPos) {
     return xReached && yReached;
 }
 
-/*
-This function updates ghost direction and
-returns adjacent target tile position
-*/
-
-Direction Ghost::GetDirection(glm::vec2 ghostPos, glm::vec2 adjTargetPos) {
+/* This function updates ghost direction and
+returns adjacent target tile position */
+Direction Ghost::GetDirection(int row, int col, glm::vec2 adjTargetPos) {
     float threshold = 0.001f;
-    float deltaX = adjTargetPos.x - this->Col;
-    float deltaY = adjTargetPos.y - this->Row;
+    float deltaX = adjTargetPos.x - col;
+    float deltaY = adjTargetPos.y - row;
     
     if (deltaX >= 0.0f && abs(deltaY) <= threshold) {
         return RIGHT;
@@ -128,66 +221,33 @@ Direction Ghost::GetDirection(glm::vec2 ghostPos, glm::vec2 adjTargetPos) {
     }
 }
 // Remember adj target is in terms of tiles
-glm::vec2 Ghost::GetAdjTarget(glm::vec2 ghostPos, glm::vec2 ghostSize, Direction currDir, glm::vec2 mapTargetPos, float tileSize, std::vector<std::vector<int>>* map) {
-
-    // float ghostX = (ghostPos.x / tileSize); // center
-    // float ghostY = (ghostPos.y / tileSize);
-    // std::tuple<int, int> ghostTilePos = std::make_tuple(ghostX, ghostY);
-
-    // get ghost center, then calculate its tiles
-    glm::vec2 ghostCenter = glm::vec2(ghostPos.x + ghostSize.x / 2.0f, ghostPos.y + ghostSize.y / 2.0f);
-    this->Row = floor(ghostCenter.y / (int)tileSize);
-    this->Col = floor(ghostCenter.x / (int)tileSize);
-
-
+glm::vec2 Ghost::GetAdjTarget(int row, int col, glm::vec2 ghostSize, Direction currDir, glm::vec2 mapTargetPos, float tileSize, std::vector<std::vector<int>>* map) {
     Direction dirs[4] = {LEFT, UP, RIGHT, DOWN};
     Direction closestNodeToMapTarget;
     float minDist = tileSize * 9999.0f;
     for (Direction dir : dirs) {
         glm::vec2 dirVec = dirToVec(dir);
-
-        // filter out 180 deg turn or wall tiles
         if (dirVec == -dirToVec(currDir)) {
             //std::cout << "Filtered out direction (backtracking) " << dir << std::endl;
             continue;
         }
-        int tile = map->at(this->Row+dirVec.y).at(this->Col+dirVec.x);
+        int tile = map->at(row+dirVec.y).at(col+dirVec.x);
         if (tile == 0) {
             //std::cout << "Filtered out direction (wall)" << dir << std::endl;
             continue;
         }
-
-
-        float dist = GetDistance(this->Col + dirVec.x, this->Row + dirVec.y, mapTargetPos.x, mapTargetPos.y);
-
+        float dist = GetDistance(col + dirVec.x, row + dirVec.y, mapTargetPos.x, mapTargetPos.y);
         if (dist < minDist) {
             closestNodeToMapTarget = dir;
             minDist = dist;
         }
-
     }
-    // //std::cout << "Calculated direction inside get adj target=" << closestNodeToMapTarget << std::endl;
-    // float adjTargetX = ghostPos.x + dirToVec(closestNodeToMapTarget).x * tileSize;
-    // float adjTargetY = ghostPos.y + dirToVec(closestNodeToMapTarget).y * tileSize;
-    //std::cout << "Min distance is in direction " << closestNodeToMapTarget << std::endl;
-    float adjTargetX = this->Col + dirToVec(closestNodeToMapTarget).x;
-    float adjTargetY = this->Row + dirToVec(closestNodeToMapTarget).y;
+
+    float adjTargetX = col + dirToVec(closestNodeToMapTarget).x;
+    float adjTargetY = row + dirToVec(closestNodeToMapTarget).y;
 
     return glm::vec2(adjTargetX, adjTargetY);
 
-    // std::cout << "ghost tile pos: " << std::get<0>(ghostTilePos) << " " << std::get<1>(ghostTilePos) << std::endl;
-    // // for (int r = 0; r < map.size(); r++) {
-    // //     for (int c = 0; c < map[r].size(); c++) {
-
-
-    // //     }
-    // // }
-
-
-
-    //return glm::vec2(0.0f);
-
-    // return glm::vec2((float)x, (float)y);
 }
 
 float Ghost::GetDistance(float x1, float y1, float x2, float y2) {
@@ -196,4 +256,6 @@ float Ghost::GetDistance(float x1, float y1, float x2, float y2) {
 
 
 Ghost::~Ghost() {
+    delete this->EyesObj;
+    delete this->DebugMapTarget;
 }

@@ -12,7 +12,7 @@ GameObject::GameObject(glm::vec2 position, glm::vec2 size, const float tileSize,
 {
 
 }
-GameObject::GameObject(glm::vec2 position, glm::vec2 size, const float tileSize, std::vector<Texture2D> sprites, float cycleLength, glm::vec3 color, float alpha, glm::vec2 velocity, std::string name)
+GameObject::GameObject(glm::vec2 position, glm::vec2 size, const float tileSize, std::vector<Texture2D> sprites, float cycleLength, glm::vec3 color, float alpha, float velocity, std::string name)
     : Position(position), Size(size), Sprites(sprites), CycleLength(cycleLength), Velocity(velocity), Color(color), Alpha(alpha), Rotation(0.0f), Destroyed(false), Name(name)
 { 
     this->Lifespan = 0.0f;
