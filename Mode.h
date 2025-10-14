@@ -1,12 +1,22 @@
 #ifndef MODE_H
 #define MODE_H
 
-enum Mode {
+enum GhostMode {
     SCATTER,
-    CHASE
+    CHASE,
+    FRIGHTENED,
+    EATEN
 };
 
-inline Mode switchMode(Mode m) {
+enum PlayerMode {
+    NORMAL,
+    FEASTING,
+    EATING,
+    DYING
+};
+
+// inline allows the linker to be okay with multiple definitions
+inline GhostMode switchMode(GhostMode m) {
     if (m == SCATTER) 
         return CHASE;
     return SCATTER;

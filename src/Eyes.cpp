@@ -10,6 +10,7 @@ static std::vector<Texture2D> GetSprites() {
         ResourceManager::GetTexture("eyesUp"),
         ResourceManager::GetTexture("eyesLeft"),
         ResourceManager::GetTexture("eyesDown"),
+        ResourceManager::GetTexture("eyesFrightened")
     };
 }
 Eyes::Eyes(Ghost* parentGhost, float tileSize)
@@ -24,7 +25,13 @@ Eyes::Eyes(Ghost* parentGhost, float tileSize)
 void Eyes::Update(float deltaTime) {
     GameObject::Update(deltaTime);
     this->Position = this->parentGhost->Position;
-    SetSprite(this->parentGhost->Dir);
+
+    if (this->parentGhost->CurrentMode == FRIGHTENED) {
+        this->currSprite = 4;
+    }
+    else {
+        SetSprite(this->parentGhost->Dir);
+    }
 
     //std::cout << this->currSprite << std::endl;
     //std::cout << this->parentGhost->Dir << std::endl;

@@ -7,6 +7,7 @@
 #include "Eyes.h"
 
 #include "Wall.h"
+#include "LevelSpecs.h"
 
 #include <iostream>
 #include <fstream>
@@ -19,12 +20,16 @@ SpriteRenderer* Renderer;
 std::queue<float> fpsQueue;
 float queueSum;
 
-const float RESOLUTION_SCALE = 3.0f;
-const float TILE_SIZE = 8.0f * RESOLUTION_SCALE;
+
 const glm::vec2 PLAYER_SIZE(13.0f/8.0f * TILE_SIZE);
 const glm::vec2 GHOST_SIZE(14.0f/8.0f * TILE_SIZE);
-const float PLAYER_VELOCITY(53.0f/8.0f * TILE_SIZE);
-int remainingDots = 240; // CHANGE WHEN ADDING POWER DOTS
+//const float PLAYER_VELOCITY(53.0f/8.0f * TILE_SIZE);
+const float PLAYER_VELOCITY(speedRatio * TILE_SIZE * LevelSpecs["playerSpeed"][1]);
+
+int remainingDots = 240 + 4;
+
+
+// 0.129, 0.129, 1.0
 
 // 256.074 RED GHOST SPAWN Y
 PlayerObject* Player;
@@ -47,6 +52,7 @@ GameObject* CurrentSensor;
 GameObject* QueuedSensor;
 std::vector<GameObject*> walls;
 std::vector<GameObject*> dots;
+std::vector<GameObject*> powerDots;
 
 GameObject* MapTiles;
 std::vector<std::vector<int>>* map;
@@ -86,7 +92,10 @@ Game::~Game() {
     }
     for (int i = 0; i < dots.size(); i++) {
         delete dots[i];
-    }    
+    }  
+    for (int i = 0; i < powerDots.size(); i++) {
+        delete powerDots[i];
+    }      
     delete MapTiles;
 }
 
@@ -170,6 +179,36 @@ void Game::BuildDots() {
 
     }
     dotInput.close();
+}
+
+void Game::BuildPowerDots() {
+    std::cout<<"Building dots..."<<std::endl;
+    std::ifstream powerDotInput;
+    std::string line;
+    
+    powerDotInput.open("/home/jacob/source/pacman/util/powerDots.txt");
+    if (!powerDotInput.is_open())
+        std::cout <<"DOT FILE DID NOT OPEN" << std::endl;
+
+
+    // for (int i = 0; i < ans.size(); i++) {
+    //     std::cout<<ans[i]<<std::endl;
+    // }
+    float halfTile = TILE_SIZE / 2.0f;
+    float halfDot = (TILE_SIZE / 4.0f) / 2.0f;
+    std::vector<Texture2D> pxSprite = { ResourceManager::GetTexture("powerDot")};
+    while (std::getline (powerDotInput, line)) {
+        std::vector<std::string> coordinates = Split(line);
+        //PrintVector(coordinates);
+        glm::vec2 tilePos(std::stoi(coordinates[1]) * TILE_SIZE, std::stoi(coordinates[0]) * TILE_SIZE);
+        //std::cout << "Tile Position " << tilePos.x << " " << tilePos.y << std::endl;
+        glm::vec2 dotPos(tilePos.x, tilePos.y);
+        //std::cout << "Dot Position " << dotPos.x << " " << dotPos.y << std::endl;
+        GameObject* d = new GameObject(dotPos, glm::vec2(TILE_SIZE), TILE_SIZE, pxSprite);
+        powerDots.push_back(d);
+
+    }
+    powerDotInput.close();
 }
 void Game::BuildWalls() {
     std::vector<Texture2D> grayWallSprites = { ResourceManager::GetTexture("px")};
@@ -260,12 +299,14 @@ void Game::Init() {
     ResourceManager::LoadTexture("textures/grayWall.png", true, "grayWall");
     ResourceManager::LoadTexture("textures/px.png", true, "px");
     ResourceManager::LoadTexture("textures/map224x248.png", true, "map224x248");
+    ResourceManager::LoadTexture("textures/powerDot.png", true, "powerDot");
 
     ResourceManager::LoadTexture("textures/ghost.png", true, "ghost");
     ResourceManager::LoadTexture("textures/eyesRight.png", true, "eyesRight");
     ResourceManager::LoadTexture("textures/eyesUp.png", true, "eyesUp");
     ResourceManager::LoadTexture("textures/eyesLeft.png", true, "eyesLeft");
     ResourceManager::LoadTexture("textures/eyesDown.png", true, "eyesDown");
+    ResourceManager::LoadTexture("textures/eyesFrightened.png", true, "eyesFrightened");
     
 
     
@@ -278,7 +319,9 @@ void Game::Init() {
     Background = new GameObject(mapPos, mapSize, TILE_SIZE, wallSprites, 1.0f, glm::vec3(1.0f), 1.0f, 0.0f, std::string("wall"));
     MapTiles = new GameObject(mapPos, mapSize, TILE_SIZE, mapTilesSprite, 1.0f, glm::vec3(1.0f), 0.25f, 0.0f, std::string("wall"));
     BuildWalls();
+    BuildPowerDots();
     BuildDots();
+
 
     
     map = BuildMap();
@@ -363,8 +406,11 @@ std::tuple<glm::vec2, glm::vec2> Game::AssembleWallInfo(float x1, float y1, floa
 
 
 void Game::Update(float dt) {
+    // std::cout << "Speed ratio: " << std::endl;
+    // std::cout << "TILE size: " << TILE_SIZE << std::endl;
+    // std::cout << "player speed ratio" << LevelSpecs["playerSpeed"][1] << std::endl;
+    // std::cout << "Total speed: " << PLAYER_VELOCITY << std::endl;
     Player->Update(dt, 224.0f * RESOLUTION_SCALE);
-
     for (Ghost* ghost : Ghosts) {
 
         if (ghost->Name == "blueGhost") {
@@ -404,6 +450,8 @@ void Game::HandleCollisions() {
 
     //bool collision = CheckPlayerWallCollision();
     HandleDotCollisions();
+    HandlePowerDotCollisions();
+    HandleGhostCollisions();
 
     bool queuedCollision = CheckPlayerWallCollision(Player->QueuedDirection);
     bool currentCollision = CheckPlayerWallCollision(Player->CurrentDirection);
@@ -444,6 +492,63 @@ void Game::HandleCollisions() {
 
 }
 
+void Game::ActivatePowerMode() {
+    std::cout << "Power mode activated" << std::endl;
+
+    // Go through every ghost and change their color
+    for (Ghost* ghost : Ghosts) {
+        ghost->EnterFrightened();
+
+    }
+    //std::vector<Ghost*> Ghosts;
+    
+}
+
+void Game::HandleGhostCollisions() {
+    bool collision;
+    for (Ghost* ghost : Ghosts) {
+
+
+        collision =  (Player->Col == ghost->Col && Player->Row == ghost->Row);
+        if (!collision) {
+            continue;
+        }
+        if (ghost->CurrentMode == FRIGHTENED) {
+            ghost->EnterEaten();
+            Player->EnterEatingState();
+            FreezeAllGhosts(1.0f);
+        }
+        // std::cout << " = = = = = = = = = =" << std::endl;
+        // std::cout << " Collided with Ghost. " << std::endl;
+        // std::cout << " = = = = = = = = = =" << std::endl;
+
+        }
+    
+}
+
+void Game::FreezeAllGhosts(float duration) {
+    for (Ghost* ghost : Ghosts) {
+        ghost->FreezeTimer = duration;
+    }
+}
+void Game::HandlePowerDotCollisions() {
+bool collision;
+    glm::vec2 playerCenterBoxPos(Player->Position + (Player->Size / 4.0f));
+    glm::vec2 playerHalfSize = (Player->Size / 2.0f);
+    for (int i = 0; i < powerDots.size(); i++) {
+        collision = CheckCollision(playerCenterBoxPos, playerHalfSize, powerDots[i]->Position+TILE_SIZE/2.0f, powerDots[i]->Size/2.0f);
+        if (collision && !powerDots[i]->Destroyed) {
+            powerDots[i]->Destroyed = true;
+
+            ActivatePowerMode();
+            remainingDots -= 1;
+            Player->FreezeFrameTimer = 3.0f/60.0f;
+            if (remainingDots <= 0) {
+                Win();
+            }
+        }
+    }
+}
 void Game::HandleDotCollisions() {
     bool collision;
     glm::vec2 playerCenterBoxPos(Player->Position + (Player->Size / 4.0f));
@@ -453,6 +558,8 @@ void Game::HandleDotCollisions() {
         if (collision && !dots[i]->Destroyed) {
             dots[i]->Destroyed = true;
             remainingDots -= 1;
+            Player->FreezeFrameTimer = 1.0f/60.0f;
+            //std::cout << " Collided with dot " << std::endl;
             if (remainingDots <= 0) {
                 Win();
             }
@@ -593,16 +700,20 @@ void Game::Render() {
         if (!dots[i]->Destroyed)
             dots[i]->Draw(*Renderer);
     }
+    for (int i = 0; i < powerDots.size(); i++) {
+        if (!powerDots[i]->Destroyed)
+            powerDots[i]->Draw(*Renderer);
+    }
     //Wall->Draw(*Renderer);
     //Wall2->Draw(*Renderer);
     
+    Player->Draw(*Renderer);
     for (Ghost* ghost : Ghosts) {
         ghost->Draw(*Renderer);
-        ghost->DebugMapTarget->Draw(*Renderer);
+        //ghost->DebugMapTarget->Draw(*Renderer);
         ghost->EyesObj->Draw(*Renderer, ghost->EyesObj->currSprite);
     }
 
-    Player->Draw(*Renderer);
     // NewGhost->Draw(*Renderer);
     // NewGhost->DebugMapTarget->Draw(*Renderer);
     // NewGhost->EyesObj->Draw(*Renderer, NewGhost->EyesObj->currSprite);

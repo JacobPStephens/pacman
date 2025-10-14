@@ -39,6 +39,7 @@ class Game {
 
         void BuildWalls();
         void BuildDots();
+        void BuildPowerDots();
         void BuildTiles();
 
         std::vector<std::vector<int>>* BuildMap();
@@ -54,8 +55,12 @@ class Game {
         GameObject* GhostMapTarget;
 
         std::tuple<glm::vec2, glm::vec2> AssembleWallInfo(float x1, float y1, float x2, float y2);
+        void HandleGhostCollisions();
+        void FreezeAllGhosts(float duration);
         void HandleCollisions();
         void HandleDotCollisions();
+        void HandlePowerDotCollisions();
+        void ActivatePowerMode();
 
         bool CheckPlayerWallCollision(Direction direction);
         void SnapPlayerToGrid(Direction direction, bool bothAxes);

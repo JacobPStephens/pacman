@@ -1,9 +1,11 @@
 #include "Ghost.h"
+#include "LevelSpecs.h"
 #include <iostream>
 
 
 const glm::vec2 GHOST_SIZE_RATIO(14.0f/8.0f);
-const float GHOST_SPEED_RATIO(39.75f/ 8.0f);
+//const float GHOST_SPEED_RATIO(39.75f/ 8.0f);
+const float GHOST_SPEED(speedRatio * TILE_SIZE * LevelSpecs["ghostSpeed"][1]);
 // TODO: Just got the map implemented as a field of the game class. Use that in this GetAdjDirection function.
 // Maybe clean up constuctor to only have what's necesary. I feel like I don't have to pass the map every update.
 std::map<std::string, glm::vec2> Ghost::ScatterTile= {
@@ -28,20 +30,37 @@ std::array<float, 8> Ghost::GetScatterTimings(int level) {
     
 };
 
+std::map<int, int> Ghost::FrightenedDurations = {
+    {1, 6},
+    {2, 5}
+};
+
 static glm::vec3 GetGhostColor(std::string name) {
     glm::vec3 color;
-    if (name == "red")
+    if (name == "red" || name == "redGhost")
         color = glm::vec3(1.0f, 0.0f, 0.0f);
-    else if (name == "pink")
+    else if (name == "pink" || name == "pinkGhost")
         color = glm::vec3(1.0f, 0.72f, 1.0f);
-    else if (name == "blue")
+    else if (name == "blue" || name == "blueGhost")
         color = glm::vec3(0.0f, 1.0f, 1.0f);
-    else if (name == "orange")
+    else if (name == "orange" || name == "orangeGhost")
         color = glm::vec3(1.0f, 0.72f, 0.325f);
     return color;
 }
-
+static glm::vec2 GetGhostHome(std::string name) {
+    glm::vec2 home;
+    if (name == "red" || name == "redGhost")
+        home = glm::vec2(14, 11);
+    else if (name == "pink" || name == "pinkGhost")
+        home = glm::vec2(23, 15);
+    else if (name == "blue" || name == "blueGhost")
+        home = glm::vec2(23, 13);
+    else if (name == "orange" || name == "orangeGhost")
+        home = glm::vec2(23, 14);
+    return home;
+}
 std::array<float, 8> Ghost::ScatterTimings = Ghost::GetScatterTimings(1);
+int Ghost::FrightenedDuration = LevelSpecs["frightenedTime"][1];
 float ModeTimer = Ghost::ScatterTimings[0];
 
 
@@ -54,20 +73,20 @@ Ghost::Ghost(std::string name, GameObject* player, std::vector<std::vector<int>>
         1.0f,
         GetGhostColor(name),
         1.0f,
-        GHOST_SPEED_RATIO * tileSize,
+        GHOST_SPEED,
         name + std::string("Ghost")
     )
 {
-
+    std::cout << "Initial Velocity: " << this->Velocity << std::endl;
     this->TILE_SIZE = tileSize;
     this->Map = map;
     
-    this->Row = 22;
-    this->Col = 12;
+    this->Row = GetGhostHome(this->Name).y;
+    this->Col = GetGhostHome(this->Name).x;
 
-    if (this->Name == "redGhost") {
-        this->Col += 2;
-    }
+    // if (this->Name == "redGhost") {
+    //     this->Col += 2;
+    // }
     glm::vec2 tileCenter = glm::vec2(this->Col, this->Row) * tileSize + tileSize/2.0f;
     this->Position = tileCenter - this->Size / 2.0f;
     this->Dir = RIGHT;
@@ -107,7 +126,14 @@ void Ghost::Update(float deltaTime, PlayerObject* player, Ghost* redGhost) {
     this->Row = floor(this->CenterPos.y/ (int)this->TILE_SIZE);
     this->Col = floor(this->CenterPos.x / (int)this->TILE_SIZE);
 
-    if (ModeTimer >= 0.0f) {
+
+    if (CurrentMode == FRIGHTENED) {
+        FrightenedTimer -= (deltaTime);
+        if (FrightenedTimer <= 0.0f) {
+            ExitFrightened();
+        }
+    }
+    else if (ModeTimer >= 0.0f) {
         ModeTimer -= (deltaTime);
     }
 
@@ -137,8 +163,12 @@ void Ghost::Update(float deltaTime, PlayerObject* player, Ghost* redGhost) {
     }
 
     // move ghost in correct direction
-    this->Position = Move(deltaTime, this->Position, this->Dir, this->Velocity);   
-
+    if (this->FreezeTimer > 0.0f) {
+        this->FreezeTimer -= deltaTime;
+    }
+    else {
+        //this->Position = Move(deltaTime, this->Position, this->Dir, this->Velocity);   
+    }
 }
 
 
@@ -147,7 +177,7 @@ glm::vec2 Ghost::Move(float deltaTime, glm::vec2 pos, Direction dir, float speed
     return pos + dirToVec(dir) * speed * deltaTime;
 }
 
-glm::vec2 Ghost::GetMapTarget(int playerRow, int playerCol, Direction playerDir, std::string ghostName, Mode currentMode, Ghost* redGhost) {
+glm::vec2 Ghost::GetMapTarget(int playerRow, int playerCol, Direction playerDir, std::string ghostName, GhostMode currentMode, Ghost* redGhost) {
     //std::cout << "Inside GetMapTarget with name = " << ghostName << std::endl;
 
     if (currentMode == SCATTER) {
@@ -220,9 +250,53 @@ Direction Ghost::GetDirection(int row, int col, glm::vec2 adjTargetPos) {
         return NONE;
     }
 }
+
+void Ghost::EnterFrightened() {
+    TurnAround(this->Dir, this->AdjTargetPos);
+    this->PreviousModeBeforeFrightened = this->CurrentMode;
+    this->CurrentMode = FRIGHTENED;
+    this->Color = glm::vec3(0.129f, 0.129f, 1.0f);
+    this->EyesObj->currSprite = 4;
+    this->Velocity = speedRatio * TILE_SIZE * LevelSpecs["frightenedGhostSpeed"][1];
+    FrightenedTimer = Ghost::FrightenedDuration;
+
+}
+
+void Ghost::ExitFrightened() {
+    this->CurrentMode = this->PreviousModeBeforeFrightened;
+    this->Color = GetGhostColor(this->Name);
+    this->Velocity = speedRatio * TILE_SIZE * LevelSpecs["ghostSpeed"][1];
+    std::cout << "Exit frightened" << std::endl;
+}   
+
+void Ghost::EnterEaten() {
+    this->CurrentMode = EATEN;
+    this->Alpha = 0.0f;
+    //this->Velocity = speedRatio * TILE_SIZE * LevelSpecs["ghostSpeed"][1] * 2.0f;
+    this->Velocity = speedRatio * TILE_SIZE * LevelSpecs["ghostSpeed"][1];
+    std::cout << "Setting velocity to " << speedRatio * TILE_SIZE * LevelSpecs["ghostSpeed"][1] << std::endl;
+
+}
 // Remember adj target is in terms of tiles
 glm::vec2 Ghost::GetAdjTarget(int row, int col, glm::vec2 ghostSize, Direction currDir, glm::vec2 mapTargetPos, float tileSize, std::vector<std::vector<int>>* map) {
     Direction dirs[4] = {LEFT, UP, RIGHT, DOWN};
+    Direction randomDir;
+    int tile;
+    if (this->CurrentMode == FRIGHTENED) {
+        randomDir = dirs[rand() % (sizeof(dirs) / sizeof(dirs[0]))];
+        tile = map->at(row+dirToVec(randomDir).y).at(col+dirToVec(randomDir).x);
+        //std::cout << randomDir << std::endl;
+
+        while (dirToVec(currDir) == -dirToVec(randomDir) || tile == 0) {
+            //std::cout << "Current dir is " << currDir << "But rolled opposite dir " << randomDir << "... Retrying" << std::endl;
+            randomDir = dirs[rand() % (sizeof(dirs) / sizeof(dirs[0]))];
+            tile = map->at(row+dirToVec(randomDir).y).at(col+dirToVec(randomDir).x);
+
+        }
+
+        return glm::vec2((float)col + dirToVec(randomDir).x, (float)row + dirToVec(randomDir).y);
+    }
+
     Direction closestNodeToMapTarget;
     float minDist = tileSize * 9999.0f;
     for (Direction dir : dirs) {

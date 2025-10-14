@@ -1,3 +1,7 @@
+TARGET_CHAR = "3"
+OUTPUT_FILE = "powerDots.txt"
+
+
 f = open('pacman.txt', 'r')
 grid = []
 for line in f.readlines():
@@ -9,10 +13,10 @@ dotPos = []
 def main():
     for i in range(len(grid)):
         for j in range(len(grid[0])):
-            if grid[i][j] == '1':
+            if grid[i][j] == TARGET_CHAR:
                 dotPos.append((i,j))
 
-    writeToFile("dots.txt")
+    writeToFile(OUTPUT_FILE)
     print(dotPos)
 
 
